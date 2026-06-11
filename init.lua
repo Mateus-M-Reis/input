@@ -1,4 +1,14 @@
-local joystick = require "joystick" -- Make sure your renamed FFI file is accessible
+-- At the top of your input/init.lua
+local current_path = ...
+local joystick_path = "joystick"
+
+if current_path and current_path ~= 'init' then
+    -- Strips '.init' if someone requires 'lib.input.init' explicitly
+    local base_path = current_path:match('(.-)%.init$') or current_path
+    joystick_path = base_path .. '.joystick'
+end
+
+local joystick = require(joystick_path)
 
 local Input = {}
 Input.__index = Input
