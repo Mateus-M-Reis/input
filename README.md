@@ -1,203 +1,182 @@
 # input
 
-A simple, powerful, and action-based input manager optimized for **LÖVR**.
-
-This module abstracts away raw keycodes, mouse buttons, and gamepad axes into semantic **actions** (like `'jump'` or `'shoot'`). It natively supports explicit state polling, repeating inputs, input sequences (combos), and raw analog gamepad values—all without hijacking LÖVR's global callbacks.
-
-## Quick Start
-
-Place the `input` folder (containing `init.lua` and `joystick.lua`) into your project and require it.
+**input** is an input library for LÖVR that bridges the gap between keyboard, mouse, and gamepad controls, allowing you to easily define and change controls on the fly. It automatically wraps around the `game_controller` library to handle gamepads seamlessly.
 
 ```lua
 local Input = require 'input'
 
-function lovr.load()
-    input = Input()
-
-    -- Bind keys, mouse buttons, and gamepad buttons to actions
-    input:bind('space', 'jump')
-    input:bind('mouse1', 'shoot')
-    input:bind('r2', 'shoot')      -- Gamepad Right Trigger
-    input:bind('leftx', 'move_x')  -- Gamepad Left Stick X-axis
-    
-    -- You can also bind a key directly to a function
-    input:bind('escape', function() lovr.event.quit() end)
-end
+local input = Input.new {
+  controls = {
+    left = {'key:left', 'key:a', 'axis:leftx-', 'button:dpleft'},
+    right = {'key:right', 'key:d', 'axis:leftx+', 'button:dpright'},
+    up = {'key:up', 'key:w', 'axis:lefty-', 'button:dpup'},
+    down = {'key:down', 'key:s', 'axis:lefty+', 'button:dpdown'},
+    action = {'key:space', 'mouse:left', 'button:a'},
+  },
+  pairs = {
+    move = {'left', 'right', 'up', 'down'}
+  },
+  deadzone = 0.2
+}
 
 function lovr.update(dt)
-    -- Must be called every frame to snapshot states!
-    input:update()
+  input:update()
 
-    if input:pressed('jump') then
-        print("Player jumped!")
-    end
-
-    if input:down('shoot', 0.1, 0.5) then
-        print("Rapid fire! (Starts after 0.5s, fires every 0.1s)")
-    end
-
-    local speed = input:getAxis('move_x')
-    if speed ~= 0 then
-        print("Moving horizontally at speed: " .. speed)
-    end
+  local x, y = input:getAxisPair 'move'
+  playerShip:move(x * 100, y * 100)
+  
+  if input:pressed 'action' then
+    playerShip:shoot()
+  end
 end
 
 ```
 
----
+## Installation
 
-## API Reference
-
-### Initialization & Core
-
-#### `Input()`
-
-Creates and returns a new Input instance. You can create multiple instances if you want separate control schemes for different players or contexts (e.g., UI vs. Gameplay).
+To use input, place `init.lua` (or rename it to `input.lua`) in your project along with the `game_controller` dependency, and then require it:
 
 ```lua
-input = Input()
+input = require 'input' -- if your file is named input.lua in the root directory
+input = require 'init'  -- if it's inside a folder named input/
 
 ```
 
-#### `Input:update()`
+## Usage
 
-**Must be called once per frame** (usually inside `lovr.update`). It explicitly polls LÖVR's system state and the FFI gamepad struct to update the internal history of what was pressed, held, or released.
+### Defining controls
 
----
-
-### Binding
-
-#### `Input:bind(key, action)`
-
-Binds a specific physical `key` to a semantic string `action`.
-
-* If `action` is a function instead of a string, that function will be automatically called when the key is pressed.
+Controls are defined using a table. Each key should be the name of a control, and each value should be another table. This table contains strings defining what sources should be mapped to the control. For example, this table:
 
 ```lua
-input:bind('w', 'up')
-input:bind('dpup', 'up') -- Gamepad D-Pad Up
-input:bind('f11', function() print("F11 pressed!") end)
+controls = {
+  left = {'key:left', 'key:a', 'axis:leftx-'},
+  shoot = {'key:space', 'button:a'},
+}
 
 ```
 
-#### `Input:unbind(key)`
+will create a control called `"left"` that responds to the left arrow key, the A key, and pushing the left analog stick on the controller to the left, and a control called `"shoot"` that responds to the Space key on the keyboard and the A button on the gamepad.
 
-Unbinds a specific physical `key` from all actions or standalone functions it is attached to.
+Sources are strings with the following format:
 
 ```lua
-input:unbind('mouse1')
+'[input type]:[input source]'
 
 ```
 
-#### `Input:unbindAll()`
+Here are the different input types and the sources that can be associated with them:
 
-Clears all current binds and standalone functions. Useful when switching from gameplay to a menu.
+| Type | Description | Source |
+| --- | --- | --- |
+| `key` | A keyboard key. | Any string recognized by [lovr.system.isKeyDown](https://lovr.org/docs/lovr.system.isKeyDown) (e.g., `'w'`, `'space'`, `'left'`). |
+| `mouse` | A mouse button. | Standard string names (`'left'`, `'right'`, `'middle'`) or a number representing a mouse button index. |
+| `axis` | A gamepad axis. | An axis name recognized by your `game_controller` library. Add a `'+'` or `'-'` on the end to denote the direction to detect (e.g., `'leftx+'`, `'lefty-'`). |
+| `button` | A gamepad button. | A button name recognized by your `game_controller` library (e.g., `'a'`, `'b'`, `'dpleft'`). |
 
----
+### Defining axis pairs
 
-### State Checking
-
-#### `Input:pressed(action)`
-
-Returns `true` on the exact frame the `action` was pressed. Returns `false` otherwise.
+input allows you to define **axis pairs**, which group four directional controls under a single name. This is perfect for analog sticks, arrow keys, etc., as it allows you to get X and Y components quickly. Each pair is defined by a table with the names of the four controls in the exact order: **left, right, up, down**.
 
 ```lua
-if input:pressed('jump') then
-    player:doJump()
-end
+pairs = {
+  move = {'left', 'right', 'up', 'down'},
+  aim = {'aimLeft', 'aimRight', 'aimUp', 'aimDown'},
+}
 
 ```
 
-#### `Input:released(action)`
+### Players
 
-Returns `true` on the exact frame the `action` was released. Returns `false` otherwise.
+**Players** are the instantiated objects that monitor and manage inputs.
+
+#### Creating players
+
+To create a player instance, use `Input.new`:
 
 ```lua
-if input:released('charge_attack') then
-    player:releaseAttack()
-end
+player = Input.new(config)
 
 ```
 
-#### `Input:down(action, [interval, delay])`
+`config` is a table containing the following values:
 
-Returns `true` if the `action` is currently being held down.
+* `controls` - a table of controls.
+* `pairs` - a table of axis pairs (optional).
+* `controller` - a gamepad instance from your `game_controller` library (optional). If omitted, the module will automatically attempt to find and bind the first available gamepad connected to the system.
+* `deadzone` - a number from 0-1 representing the minimum value axes have to cross to be detected (optional, defaults to `0.5`).
 
-* **`interval`** *(optional)*: If provided, the function will return `true` repeatedly every `interval` seconds while the key is held.
-* **`delay`** *(optional)*: If provided alongside `interval`, the repeating behavior will pause for `delay` seconds before starting the repeat cycle.
+#### Updating players
+
+You must update your player instance every frame inside `lovr.update`:
 
 ```lua
--- Returns true every frame the button is held
-if input:down('walk') then 
-    player.x = player.x + 1 
-end
-
--- Returns true immediately, waits 0.5s, then returns true every 0.1s
-if input:down('shoot', 0.1, 0.5) then
-    spawnBullet()
-end
+player:update()
 
 ```
 
-#### `Input:getAxis(action)`
+#### Getting the value of controls
 
-Returns the raw float value (`-1.0` to `1.0`) of an analog action. If the action is bound to a digital button (like a keyboard key), it will internally resolve to `1.0` if held, or `0.0` if not.
+To get the current digital/analog value of a control, use:
 
 ```lua
-local turn_speed = input:getAxis('turn_camera')
-camera:rotate(turn_speed * dt)
+value = player:get(control)
 
 ```
 
----
+`player:get` always returns a number between `0` and `1`. To get the raw value of a control without applying the deadzone, use `player:getRaw`.
 
-### Advanced
+#### Getting the value of axis pairs
 
-#### `Input:sequence(...)`
-
-Checks if a specific sequence of actions and time delays has been executed. Extremely useful for fighting game combos or cheat codes.
-
-* Arguments must alternate between `action` (string) and `delay` (number).
-* The number of arguments must be odd, starting and ending with an action.
-* The delay represents the *maximum* allowed time (in seconds) between the two actions.
+To get the X and Y components of a registered axis pair, use:
 
 ```lua
--- Checks if 'up', 'up', 'down', 'down' was pressed. 
--- The player has a maximum of 0.5 seconds between each press.
-if input:sequence('up', 0.5, 'up', 0.5, 'down', 0.5, 'down') then
-    print("Konami Code Activated!")
-end
+x, y = player:getAxisPair(pair)
 
 ```
 
----
+In this case, `x` and `y` are numbers between `-1` and `1`. The length of the vector is automatically capped to `1` to prevent faster movement along diagonals. To get these values without deadzones applied, use `player:getRawAxisPair(pair)`.
 
-## Valid Key Names
+#### Getting down, pressed, and released states
 
-The module supports mapping directly to LÖVR's standard system keys, along with mapped strings for mice and gamepads.
+To check whether a control is currently held down, use:
 
-### Keyboard
+```lua
+down = player:down(control)
 
-Standard LÖVR key names (`'space'`, `'return'`, `'escape'`, `'a'`, `'b'`, `'c'`, `'f1'`, `'up'`, `'down'`, etc.).
+```
 
-### Mouse
+`player:down` returns `true` if the value of the control is greater than the deadzone, and `false` if not.
 
-* `'mouse1'` (Left Click)
-* `'mouse2'` (Right Click)
-* `'mouse3'` (Middle Click)
-* `'mouse4'`, `'mouse5'`
+```lua
+pressed = player:pressed(control)
 
-### Gamepad (via internal GLFW mapping)
+```
 
-**Buttons:**
+`player:pressed` returns `true` if the control transitioned to being pressed *this exact frame*, and `false` otherwise.
 
-* Face buttons: `'a'`, `'b'`, `'x'`, `'y'`
-* Bumpers: `'l1'`, `'r1'`
-* Sticks (Click): `'leftstick'`, `'rightstick'`
-* D-Pad: `'dpup'`, `'dpdown'`, `'dpleft'`, `'dpright'`
-* System: `'back'`, `'start'`, `'guide'`
+```lua
+released = player:released(control)
 
-**Axes:**
+```
 
-* Thumbsticks: `'leftx'`, `'lefty'`, `'rightx'`, `'righty'`
-* Triggers: `'l2'`, `'r2'`
+`player:released` returns `true` if the control transitioned to being released *this exact frame*, and `false` otherwise.
+
+#### Updating the configuration at runtime
+
+The configuration can be modified dynamically at runtime by passing a new table to `changeConfig`:
+
+```lua
+player:changeConfig({ deadzone = 0.3, controller = newGamepad })
+
+```
+
+Note that while you can safely adjust deadzones or switch controllers, you should not add entirely new control names or pairs after instantiation.
+
+#### Getting the active input device
+
+You can call `player:getActiveDevice()` to see which type of input hardware was last used actively by the player. This is useful for dynamically updating on-screen UI prompts. It returns one of the following strings:
+
+* `'keyboard'`
+* `'mouse'`
+* `'gamepad'`
