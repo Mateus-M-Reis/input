@@ -3,9 +3,8 @@ local current_path = ...
 local joystick_path = "joystick"
 
 if current_path and current_path ~= 'init' then
-    -- Strips '.init' if someone requires 'lib.input.init' explicitly
-    local base_path = current_path:match('(.-)%.init$') or current_path
-    joystick_path = base_path .. '.joystick'
+  local base_path = current_path:match('(.-)%.init$') or current_path
+  joystick_path = base_path .. '.joystick'
 end
 
 local joystick = require(joystick_path)
@@ -16,26 +15,28 @@ Input.__index = Input
 -- Mouse mapping
 local mouse_buttons = { mouse1 = 1, mouse2 = 2, mouse3 = 3, mouse4 = 4, mouse5 = 5 }
 
--- Gamepad button mapping (linking your string keys to the GLFW globals)
+-- Gamepad button mapping (Prefixed with gp_ to prevent keyboard collisions)
 local gamepad_buttons = {
-  a = GAMEPAD_BUTTON_A, b = GAMEPAD_BUTTON_B, x = GAMEPAD_BUTTON_X, y = GAMEPAD_BUTTON_Y,
-  back = GAMEPAD_BUTTON_BACK, start = GAMEPAD_BUTTON_START, guide = GAMEPAD_BUTTON_GUIDE,
-  leftstick = GAMEPAD_BUTTON_LEFT_THUMB, rightstick = GAMEPAD_BUTTON_RIGHT_THUMB,
-  l1 = GAMEPAD_BUTTON_LEFT_BUMPER, r1 = GAMEPAD_BUTTON_RIGHT_BUMPER,
-  dpup = GAMEPAD_BUTTON_DPAD_UP, dpdown = GAMEPAD_BUTTON_DPAD_DOWN,
-  dpleft = GAMEPAD_BUTTON_DPAD_LEFT, dpright = GAMEPAD_BUTTON_DPAD_RIGHT
+  gp_a = GAMEPAD_BUTTON_A, gp_b = GAMEPAD_BUTTON_B, gp_x = GAMEPAD_BUTTON_X, gp_y = GAMEPAD_BUTTON_Y,
+  gp_back = GAMEPAD_BUTTON_BACK, gp_start = GAMEPAD_BUTTON_START, gp_guide = GAMEPAD_BUTTON_GUIDE,
+  gp_leftstick = GAMEPAD_BUTTON_LEFT_THUMB, gp_rightstick = GAMEPAD_BUTTON_RIGHT_THUMB,
+  gp_l1 = GAMEPAD_BUTTON_LEFT_BUMPER, gp_r1 = GAMEPAD_BUTTON_RIGHT_BUMPER,
+  gp_dpup = GAMEPAD_BUTTON_DPAD_UP, gp_dpdown = GAMEPAD_BUTTON_DPAD_DOWN,
+  gp_dpleft = GAMEPAD_BUTTON_DPAD_LEFT, gp_dpright = GAMEPAD_BUTTON_DPAD_RIGHT
 }
 
 -- Gamepad axis mapping
 local gamepad_axes = {
-  leftx = GAMEPAD_AXIS_LEFT_X, lefty = GAMEPAD_AXIS_LEFT_Y,
-  rightx = GAMEPAD_AXIS_RIGHT_X, righty = GAMEPAD_AXIS_RIGHT_Y,
-  l2 = GAMEPAD_AXIS_LEFT_TRIGGER, r2 = GAMEPAD_AXIS_RIGHT_TRIGGER
+  gp_leftx = GAMEPAD_AXIS_LEFT_X, gp_lefty = GAMEPAD_AXIS_LEFT_Y,
+  gp_rightx = GAMEPAD_AXIS_RIGHT_X, gp_righty = GAMEPAD_AXIS_RIGHT_Y,
+  gp_l2 = GAMEPAD_AXIS_LEFT_TRIGGER, gp_r2 = GAMEPAD_AXIS_RIGHT_TRIGGER
 }
 
-function Input.new()
+-- FIX 1: Accept and store the device_id
+function Input.new(device_id)
   local self = setmetatable({}, Input)
 
+  self.device_id = device_id or 1 -- Default to Player 1 if nil
   self.binds = {}
   self.functions = {}
   self.repeat_state = {}
@@ -43,7 +44,7 @@ function Input.new()
 
   self.state = {}
   self.prev_state = {}
-  self.axis_state = {} -- Stores raw float values for analog sticks/triggers
+  self.axis_state = {} 
 
   return self
 end
@@ -74,12 +75,10 @@ function Input:unbindAll()
 end
 
 function Input:update()
-  -- Copy current state to prev_state for accurate :pressed() and :released() checks
   for k, v in pairs(self.state) do
     self.prev_state[k] = v
   end
 
-  -- Build a list of actively bound keys to avoid polling the entire keyboard layout
   local keys_to_poll = {}
   for action, keys in pairs(self.binds) do
     for _, key in ipairs(keys) do keys_to_poll[key] = true end
@@ -88,9 +87,9 @@ function Input:update()
     keys_to_poll[key] = true
   end
 
-  -- Check if gamepad 1 is active via FFI
-  local gamepad_present = joystick.isDevicePresent(1) and joystick.isDeviceGamepad(1)
-  local gp_state = gamepad_present and joystick.getGamepadState(1) or nil
+  -- FIX 2: Check gamepad state using self.device_id, NOT hardcoded 1
+  local gamepad_present = joystick.isDevicePresent(self.device_id) and joystick.isDeviceGamepad(self.device_id)
+  local gp_state = gamepad_present and joystick.getGamepadState(self.device_id) or nil
 
   -- Explicit Polling
   for key in pairs(keys_to_poll) do
@@ -106,17 +105,18 @@ function Input:update()
       if gp_state then
         local val = gp_state.axes[gamepad_axes[key]]
         self.axis_state[key] = val
-        -- Treat analog movement over 50% as a boolean "press" for standard binds
         is_down = (math.abs(val) > 0.5)
       end
     else
-      is_down = lovr.system.isKeyDown(key)
+      -- FIX 3: Safely check physical keyboard. pcall prevents LÖVR from crashing on weird strings.
+      pcall(function()
+        is_down = lovr.system.isKeyDown(key)
+      end)
     end
 
     self.state[key] = is_down
   end
 
-  -- Handle repeating inputs
   for k, v in pairs(self.repeat_state) do
     if v and self.state[k] then
       v.pressed = false
@@ -138,7 +138,6 @@ function Input:update()
     end
   end
 
-  -- Call freestanding bound functions
   for key, func in pairs(self.functions) do
     if self.state[key] and not self.prev_state[key] then
       func()
@@ -148,7 +147,6 @@ end
 
 function Input:pressed(action)
   if not action or not self.binds[action] then return false end
-
   for _, key in ipairs(self.binds[action]) do
     if self.state[key] and not self.prev_state[key] then
       return true
@@ -159,7 +157,6 @@ end
 
 function Input:released(action)
   if not action or not self.binds[action] then return false end
-
   for _, key in ipairs(self.binds[action]) do
     if self.prev_state[key] and not self.state[key] then
       return true
@@ -172,7 +169,6 @@ function Input:down(action, interval, delay)
   if not action or not self.binds[action] then return false end
 
   for _, key in ipairs(self.binds[action]) do
-    -- If it's an analog axis and no repeat is asked, return its raw float value
     if gamepad_axes[key] and not interval and not delay then
       if self.state[key] then return self.axis_state[key] end
     end
@@ -190,21 +186,16 @@ function Input:down(action, interval, delay)
         return true
       end
     else
-      if self.state[key] then
-        return true
-      end
+      if self.state[key] then return true end
     end
   end
   return false
 end
 
 function Input:getAxis(action)
-  -- Custom helper to securely fetch raw -1.0 to 1.0 analog data
   if not action or not self.binds[action] then return 0 end
   for _, key in ipairs(self.binds[action]) do
-    if gamepad_axes[key] then
-      return self.axis_state[key] or 0
-    end
+    if gamepad_axes[key] then return self.axis_state[key] or 0 end
   end
   return 0
 end
