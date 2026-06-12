@@ -1,26 +1,55 @@
+---@alias DeviceType 'keyboard'|'mouse'|'gamepad'
+
+---@class ControlState
+---@field raw number The raw input value before deadzones are applied.
+---@field value number The processed input value (with deadzones applied).
+---@field down boolean Is the control currently held down?
+---@field pressed boolean Was the control pressed down on this specific frame?
+---@field released boolean Was the control released on this specific frame?
+
+---@class AxisPairState
+---@field x number The processed X axis value (normalized between -1 and 1).
+---@field y number The processed Y axis value (normalized between -1 and 1).
+---@field rawX number The raw, unprocessed X axis value.
+---@field rawY number The raw, unprocessed Y axis value.
+
+---@class InputConfig
+---@field controls table<string, string[]> A dictionary mapping action names to a list of source strings (e.g., `{'key:w', 'button:a'}`).
+---@field pairs table<string, [string, string, string, string]> Maps a directional action to an array of 4 control names: `{left, right, up, down}`.
+---@field controllerIndex? number The index of the gamepad (1-based index following Lua standards). Defaults to 1.
+---@field controller? number An explicit override for the hardware joystick ID.
+---@field deadzone? number Axis deadzone threshold between 0 and 1. Defaults to 0.5.
+
 ---@class Input
 local Input = {}
 
 ---@class Player
----@field controls table
----@field pairs table
+---@field controls table<string, string[]>
+---@field pairs table<string, [string, string, string, string]>
 ---@field controller number|nil
+---@field controllerIndex number
 ---@field deadzone number
----@field activeDevice string
+---@field activeDevice DeviceType
+---@field _activeControls table<string, ControlState>
+---@field _activePairs table<string, AxisPairState>
+---@field _explicitController number|nil
 local Player = {}
 Player.__index = Player
 
----Parses a source string like "key:w" into type and value.
+---Parses a source string like "key:w" into type and value components.
 ---@param source string
----@return string, string
+---@return string? type The type of input device (e.g., "key", "button").
+---@return string? value The specific key, button, or axis identifier.
 local function parseSource(source)
   local type, value = source:match("^(%a+):(.+)$")
   return type, value
 end
 
+---@type table<string, number>
 local mouseMap = { left = 1, right = 2, middle = 3 }
 
--- Mapeamento dos botões (String do Baton -> Índice do GLFWgamepadstate)
+---Mapeamento dos botões (String do Baton -> Índice do GLFWgamepadstate)
+---@type table<string, number>
 local gamepadButtons = {
   a = 0, b = 1, x = 2, y = 3,
   leftshoulder = 4, rightshoulder = 5,
@@ -29,7 +58,8 @@ local gamepadButtons = {
   dpup = 11, dpright = 12, dpdown = 13, dpleft = 14
 }
 
--- Mapeamento dos eixos (String do Baton -> Índice do GLFWgamepadstate)
+---Mapeamento dos eixos (String do Baton -> Índice do GLFWgamepadstate)
+---@type table<string, number>
 local gamepadAxes = {
   leftx = 0, lefty = 1,
   rightx = 2, righty = 3,
@@ -39,7 +69,7 @@ local gamepadAxes = {
 local ok, gc = pcall(require, "joystick")
 
 ---Creates a new input manager instance.
----@param config table
+---@param config InputConfig
 ---@return Player
 function Input.new(config)
   local instance = setmetatable({}, Player)
@@ -48,12 +78,12 @@ function Input.new(config)
 end
 
 ---Initializes the player input instance.
----@param config table
+---@param config InputConfig
 function Player:init(config)
   self.controls = config.controls or {}
   self.pairs = config.pairs or {}
   self.controller = config.controller
-  self.controllerIndex = config.controllerIndex or 0
+  self.controllerIndex = config.controllerIndex or 1
   self.deadzone = config.deadzone or 0.5
   self.activeDevice = 'keyboard'
 
@@ -64,7 +94,7 @@ function Player:init(config)
 end
 
 ---Updates the configuration at runtime.
----@param config table
+---@param config InputConfig
 function Player:changeConfig(config)
   if config.controls then self.controls = config.controls end
   if config.pairs then self.pairs = config.pairs end
@@ -93,7 +123,7 @@ function Player:changeConfig(config)
   end
 end
 
----Updates input state. Call this once per frame.
+---Updates input state. Call this once per frame inside `lovr.update`.
 function Player:update()
   -- Busca dinâmica do controle via ID numérico (jid) do joystick.lua
   if ok and gc then
@@ -115,6 +145,7 @@ function Player:update()
     end
   end
 
+  ---@type DeviceType|nil
   local primaryDevice = nil
   local gamepadState = nil
 
@@ -150,7 +181,6 @@ function Player:update()
       elseif type == "button" and gamepadState then
         local btnId = gamepadButtons[value:lower()]
         if btnId then
-          -- GLFWgamepadstate retorna 1 se pressionado, 0 caso contrário
           raw = gamepadState.buttons[btnId]
           val = raw
           if val > 0 then primaryDevice = 'gamepad' end
@@ -203,7 +233,7 @@ function Player:update()
     local rawLeft  = self._activeControls[controls[1]] and self._activeControls[controls[1]].raw or 0
     local rawRight = self._activeControls[controls[2]] and self._activeControls[controls[2]].raw or 0
     local rawUp    = self._activeControls[controls[3]] and self._activeControls[controls[3]].raw or 0
-    local rawDown  = self._activeControls[controls[4]] and self._activeControls[controls[4]].raw or 0
+    rawDown  = self._activeControls[controls[4]] and self._activeControls[controls[4]].raw or 0
 
     local x = right - left
     local y = down - up
@@ -221,14 +251,51 @@ function Player:update()
   end
 end
 
--- Public API
+---Gets the current processed numeric value of a control action (0 to 1).
+---@param name string The name of the control action.
+---@return number value
 function Player:get(name) return self._activeControls[name] and self._activeControls[name].value or 0 end
+
+---Gets the raw numeric value of a control action before deadzones are calculated.
+---@param name string The name of the control action.
+---@return number rawValue
 function Player:getRaw(name) return self._activeControls[name] and self._activeControls[name].raw or 0 end
+
+---Checks if a control action is currently being held down.
+---@param name string The name of the control action.
+---@return boolean isDown
 function Player:down(name) return self._activeControls[name] and self._activeControls[name].down or false end
+
+---Checks if a control action was triggered exactly on this frame.
+---@param name string The name of the control action.
+---@return boolean isPressed
 function Player:pressed(name) return self._activeControls[name] and self._activeControls[name].pressed or false end
+
+---Checks if a control action was released exactly on this frame.
+---@param name string The name of the control action.
+---@return boolean isReleased
 function Player:released(name) return self._activeControls[name] and self._activeControls[name].released or false end
-function Player:getAxisPair(name) local p = self._activePairs[name]; return p and p.x or 0, p and p.y or 0 end
-function Player:getRawAxisPair(name) local p = self._activePairs[name]; return p and p.rawX or 0, p and p.rawY or 0 end
+
+---Returns the processed X and Y values of a directional control pair.
+---@param name string The name of the axis pair.
+---@return number x Normalized value between -1 and 1.
+---@return number y Normalized value between -1 and 1.
+function Player:getAxisPair(name)
+  local p = self._activePairs[name]
+  return p and p.x or 0, p and p.y or 0
+end
+
+---Returns the raw X and Y values of a directional control pair (unprocessed by deadzones).
+---@param name string The name of the axis pair.
+---@return number rawX Unprocessed value.
+---@return number rawY Unprocessed value.
+function Player:getRawAxisPair(name)
+  local p = self._activePairs[name]
+  return p and p.rawX or 0, p and p.rawY or 0
+end
+
+---Returns the device type that triggered the most recent input change.
+---@return DeviceType activeDevice
 function Player:getActiveDevice() return self.activeDevice end
 
 return Input
