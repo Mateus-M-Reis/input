@@ -1,10 +1,10 @@
 local Input = require "init"
 
 local input
-local controllerInstance
 
 function lovr.load()
-  -- Default configuration for the adapted Input module
+  -- O init.lua agora é inteligente: ele procura o 'joystick.lua' (seu antigo game_controller)
+  -- e faz a busca dos controles automaticamente dentro do input:update()
   input = Input.new({
     controls = {
       left =  { 'key:a', 'key:left',  'axis:leftx-', 'button:dpleft' },
@@ -16,27 +16,26 @@ function lovr.load()
     pairs = {
       move = { 'left', 'right', 'up', 'down' }
     },
-    controller = controllerInstance, -- Pass the gamepad object here
+    controllerIndex = 1, -- 0 para o primeiro controle, 1 para o segundo
     deadzone = 0.2
   })
 end
 
 function lovr.update(dt)
-  -- If a new controller was plugged in mid-gameplay, update the reference:
-  -- if did_not_have_controller and now_has_one then
-  --   input:changeConfig({ controller = new_controller })
-  -- end
-
-  -- Update the Input state
+  -- Aqui o input:update() chama o gc.getControllers() do seu joystick.lua
   input:update()
 
-  -- Input Test
+  -- Teste para ver se está lendo algo (vai printar se você mover o analógico ou apertar algo)
   local mx, my = input:getAxisPair('move')
-  if math.abs(mx) > 0 or math.abs(my) > 0 then
-    print(string.format("Moving vector: X=%.2f, Y=%.2f", mx, my))
+  if math.abs(mx) > 0.1 or math.abs(my) > 0.1 then
+    print(string.format("Movendo: X=%.2f, Y=%.2f", mx, my))
   end
 
   if input:pressed('action') then
-    print("Action pressed! Current device: " .. input:getActiveDevice())
+    print("Botão de ação pressionado!")
   end
+end
+
+function lovr.draw()
+  -- Renderização do seu jogo...
 end
