@@ -1,6 +1,6 @@
 # input
 
-**input** is an input library for LÖVR that bridges the gap between keyboard, mouse, and gamepad controls, allowing you to easily define and change controls on the fly. It automatically wraps around the `game_controller` library to handle gamepads seamlessly.
+**input** is an input library for LÖVR that bridges the gap between keyboard, mouse, and gamepad controls, allowing you to easily define and change controls on the fly. It automatically wraps around the [game_controller](https://github.com/immortalx74/game_controller) library to handle gamepads seamlessly. It is a port of love2d [baton](https://github.com/tesselode/baton) to lovr.
 
 ```lua
 local Input = require 'input'
@@ -16,6 +16,7 @@ local input = Input.new {
   pairs = {
     move = {'left', 'right', 'up', 'down'}
   },
+  controllerIndex = 1,
   deadzone = 0.2
 }
 
@@ -38,7 +39,6 @@ To use input, place `init.lua` (or rename it to `input.lua`) in your project alo
 
 ```lua
 input = require 'input' -- if your file is named input.lua in the root directory
-input = require 'init'  -- if it's inside a folder named input/
 
 ```
 
