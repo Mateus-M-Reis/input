@@ -66,7 +66,7 @@ local gamepadAxes = {
   lefttrigger = 4, righttrigger = 5
 }
 
-local ok, gc = pcall(require, (...):gsub("%.init$", "") .. "joystick")
+local ok, gc = pcall(require, (...):gsub("%.init$", "") .. ".joystick")
 
 ---Creates a new input manager instance.
 ---@param config InputConfig
