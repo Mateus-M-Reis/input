@@ -66,17 +66,17 @@ local gamepadAxes = {
   lefttrigger = 4, righttrigger = 5
 }
 
-local module_name = (...); print(module_name)
+local module_name = (...)
 
 local ok, gc
 if module_name then
   -- Se carregou via require, extrai o prefixo (ex: 'lib.input' -> 'lib.input.')
   -- O match remove a última parte (o nome do arquivo)
-  local prefix = module_name:match("(.-)[^%.]+$") or ""; print(prefix)
-  ok, gc = pcall(require, prefix .. "game_controller"); print(prefix .. "game_controller")
+  local prefix = module_name:match("(.-)[^%.]+$") or ""
+  ok, gc = pcall(require, prefix .. "game_controller")
 else
   -- Se module_name é nil, estamos na raiz ou carregando direto
-  ok, gc = pcall(require, "game_controller");  print("game_controller")
+  ok, gc = pcall(require, "game_controller")
 end
 
 ---Creates a new input manager instance.
