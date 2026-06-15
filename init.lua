@@ -66,7 +66,18 @@ local gamepadAxes = {
   lefttrigger = 4, righttrigger = 5
 }
 
-local ok, gc = pcall(require, (...):gsub("%.init$", "") .. ".joystick")
+local module_name = (...); print(module_name)
+
+local ok, gc
+if module_name then
+  -- Se carregou via require, extrai o prefixo (ex: 'lib.input' -> 'lib.input.')
+  -- O match remove a última parte (o nome do arquivo)
+  local prefix = module_name:match("(.-)[^%.]+$") or ""; print(prefix)
+  ok, gc = pcall(require, prefix .. "game_controller"); print(prefix .. "game_controller")
+else
+  -- Se module_name é nil, estamos na raiz ou carregando direto
+  ok, gc = pcall(require, "game_controller");  print("game_controller")
+end
 
 ---Creates a new input manager instance.
 ---@param config InputConfig
@@ -125,14 +136,14 @@ end
 
 ---Updates input state. Call this once per frame inside `lovr.update`.
 function Player:update()
-  -- Busca dinâmica do controle via ID numérico (jid) do joystick.lua
+  -- Busca dinâmica do controle via ID numérico (jid) do game_controller.lua
   if ok and gc then
     if not self._explicitController then
       self.controller = nil
       local targetIndex = self.controllerIndex or 1
       local count = 1
 
-      -- GLFW IDs vão de 1 a 16 no joystick.lua
+      -- GLFW IDs vão de 1 a 16 no game_controller.lua
       for i = 1, 16 do
         if gc.isDevicePresent(i) and gc.isDeviceGamepad(i) then
           if count == targetIndex then
