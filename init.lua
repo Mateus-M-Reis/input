@@ -68,16 +68,23 @@ local gamepadAxes = {
 
 local module_name = (...)
 
-local ok, gc
-if module_name then
-  -- Se carregou via require, extrai o prefixo (ex: 'lib.input' -> 'lib.input.')
-  -- O match remove a última parte (o nome do arquivo)
-  local prefix = module_name:match("(.-)[^%.]+$") or ""
-  ok, gc = pcall(require, prefix .. "game_controller")
-else
-  -- Se module_name é nil, estamos na raiz ou carregando direto
-  ok, gc = pcall(require, "game_controller")
+-- Default fallback if loaded via dofile or loadfile without a module name
+local target_module = "game_controller"
+
+if type(module_name) == "string" and module_name ~= "" then
+  if module_name == "init" then
+    -- Scenario 1: Local demo testing (require 'init')
+    target_module = "game_controller"
+  elseif module_name:match("%.init$") then
+    -- Scenario 2: Explicit init require (require 'lib.input.init')
+    target_module = module_name:gsub("%.init$", ".game_controller")
+  else
+    -- Scenario 3: Standard integration (require 'lib.input' or require 'input')
+    target_module = module_name .. ".game_controller"
+  end
 end
+
+local ok, gc = pcall(require, target_module)
 
 ---Creates a new input manager instance.
 ---@param config InputConfig
