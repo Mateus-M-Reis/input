@@ -73,7 +73,7 @@ function lovr.update(dt)
   if input1:pressed('left')  then print("Player 1 -> Botão left pressionado!") end
   if input1:pressed('right') then print("Player 1 -> Botão right pressionado!") end
   if input1:pressed('up')    then print("Player 1 -> Botão up pressionado!") end
-  if input1:pressed('down')  then print("Player 1 -> Botão b pressionado!") end
+  if input1:pressed('down')  then print("Player 1 -> Botão down pressionado!") end
   if input1:pressed('ls') then print("Player 1 -> Botão leftshoulder  pressionado!") end
   if input1:pressed('rs') then print("Player 1 -> Botão rightshoulder pressionado!") end
   if input1:pressed('l2') then print("Player 1 -> Botão l2 pressionado!") end
@@ -89,7 +89,7 @@ function lovr.update(dt)
   if input2:pressed('left')  then print("Player 2 -> Botão left pressionado!") end
   if input2:pressed('right') then print("Player 2 -> Botão right pressionado!") end
   if input2:pressed('up')    then print("Player 2 -> Botão up pressionado!") end
-  if input2:pressed('down')  then print("Player 2 -> Botão b pressionado!") end
+  if input2:pressed('down')  then print("Player 2 -> Botão down pressionado!") end
   if input2:pressed('ls') then print("Player 2 -> Botão leftshoulder  pressionado!") end
   if input2:pressed('rs') then print("Player 2 -> Botão rightshoulder pressionado!") end
   if input2:pressed('l2') then print("Player 2 -> Botão l2 pressionado!") end
