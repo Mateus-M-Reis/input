@@ -38,7 +38,7 @@ end
 To use input, drop the module somewhere in your project, and then require it:
 
 ```lua
-input = require 'lib.input' -- if your file is in the `lib/` folder
+input = require 'lib.input' -- if the module is in the lib/ folder
 
 ```
 
