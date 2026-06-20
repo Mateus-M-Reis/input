@@ -35,10 +35,10 @@ end
 
 ## Installation
 
-To use input, place `init.lua` (or rename it to `input.lua`) in your project along with the `game_controller` dependency, and then require it:
+To use input, drop the module somewhere in your project, and then require it:
 
 ```lua
-input = require 'input' -- if your file is named input.lua in the root directory
+input = require 'lib.input' -- if your file is in the `lib/` folder
 
 ```
 
